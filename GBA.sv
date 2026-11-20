@@ -128,7 +128,7 @@ parameter CONF_STR = {
 
 	"- ;",
 	"R0,Reset;",
-	"J1,A,B,L,R,Select,Start,FastForward,Rewind,Savestates;",
+	"J1,A,B,L,R,Select,Start,FastForward,Rewind,Savestates,Pause;",
 	"jn,A,B,L,R,Select,Start,X,X;",
 	"I,",
 	"Load=DPAD Up|Save=Down|Slot=L+R,",
@@ -323,6 +323,15 @@ wire save_eeprom, save_sram, save_flash, ss_loaded;
 reg fast_forward, pause, cpu_turbo;
 reg ff_latch;
 
+// "Pause" virtual button: toggles core pause without opening the OSD
+reg btn_pause = 0;
+always @(posedge clk_sys) begin : pausekey
+	reg old_state;
+	old_state <= joy[13];
+	if (reset | ss_loaded | status[27]) btn_pause <= 0;   // a completed load ends the pause, a save keeps it; off while Rewind Capture is on
+	else if (~old_state & joy[13]) btn_pause <= ~btn_pause;
+end
+
 always @(posedge clk_sys) begin : ffwd
 	reg last_ffw;
 	reg ff_was_held;
@@ -347,8 +356,8 @@ always @(posedge clk_sys) begin : ffwd
 		end
 	end
 
-	fast_forward <= (joy[10] | ff_latch) & ~force_turbo;
-	pause <= force_pause | (status[5] & OSD_STATUS & ~status[27]); // pause from "sync to core" or "pause in osd", but not if rewind capture is on
+	fast_forward <= (joy[10] | ff_latch) & ~force_turbo & ~btn_pause;   // the Pause button also holds fast forward
+	pause <= force_pause | ((btn_pause | (status[5] & OSD_STATUS)) & ~status[27]); // pause from "sync to core", "pause in osd" or Pause button, but not if rewind capture is on
 	cpu_turbo <= ((status[16] & ~fast_forward) | force_turbo) & ~pause;
 end
 
